@@ -1,0 +1,77 @@
+import { createClient } from '@/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import ProjektVy from '@/components/ProjektVy'
+import type { StegStatus } from '@/lib/supabase/types'
+
+export default async function ProjektDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('namn')
+    .eq('id', user!.id)
+    .single()
+  const profile = profileRow as { namn: string } | null
+
+  const { data: projektRow } = await supabase
+    .from('projekt')
+    .select('id, brf_adress, status, skapad_tid, mallar(namn)')
+    .eq('id', id)
+    .single()
+
+  if (!projektRow) notFound()
+
+  const projekt = projektRow as {
+    id: string
+    brf_adress: string
+    status: string
+    skapad_tid: string
+    mallar: { namn: string } | null
+  }
+
+  const { data: stegRows } = await supabase
+    .from('projekt_steg')
+    .select('id, projekt_id, mall_steg_id, bild_url, signerad_av, signerad_tid, status, kommentar, noteringar, uppdaterad_tid, mall_steg(ordning, rubrik, instruktion)')
+    .eq('projekt_id', id)
+
+  const steg = (stegRows ?? []) as Array<{
+    id: string
+    projekt_id: string
+    mall_steg_id: string
+    bild_url: string | null
+    signerad_av: string | null
+    signerad_tid: string | null
+    status: StegStatus
+    kommentar: string | null
+    noteringar: string | null
+    uppdaterad_tid: string
+    mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
+  }>
+
+  const { data: pdfRow } = await supabase
+    .from('pdf_dokument')
+    .select('fil_url, skapad_tid')
+    .eq('projekt_id', id)
+    .order('skapad_tid', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const pdf = pdfRow as { fil_url: string; skapad_tid: string } | null
+
+  return (
+    <ProjektVy
+      projekt={{
+        id: projekt.id,
+        brf_adress: projekt.brf_adress,
+        status: projekt.status,
+        skapad_tid: projekt.skapad_tid,
+        mall_namn: projekt.mallar?.namn ?? '',
+      }}
+      steg={steg}
+      userName={profile?.namn ?? ''}
+      pdfUrl={pdf?.fil_url ?? null}
+    />
+  )
+}
