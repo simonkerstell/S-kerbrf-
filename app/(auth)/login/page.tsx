@@ -32,7 +32,7 @@ export default function LoginPage() {
         </Link>
         <div className="py-12 sm:py-0">
           <h1 className="text-3xl sm:text-4xl font-bold leading-tight mb-4">
-            Digital besiktning för din BRF
+            Digital verifikation för din BRF
           </h1>
           <p className="text-blue-300 text-base leading-relaxed max-w-sm">
             Dokumentera renoveringar steg för steg med foton, noteringar och digitala signaturer.

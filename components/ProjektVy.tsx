@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { StegStatus } from '@/lib/supabase/types'
 
+interface Bild { id: string; url: string }
+
 interface Steg {
   id: string; projekt_id: string; mall_steg_id: string
   bild_url: string | null; signerad_av: string | null; signerad_tid: string | null
   status: StegStatus; kommentar: string | null; noteringar: string | null
   mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
+  bilder: Bild[]
 }
 
 interface Projekt {
@@ -21,12 +24,15 @@ interface Props {
 }
 
 const statusLabel: Record<string, string> = {
-  ej_paborjad: 'Ej påbörjad', klar: 'Klar', godkand: 'Godkänd', underkand: 'Underkänd',
+  ej_paborjad: 'Ej påbörjad',
+  klar: 'Väntar på godkännande',
+  godkand: 'Godkänd',
+  underkand: 'Ej godkänd',
 }
 
 const statusColor: Record<string, string> = {
   ej_paborjad: 'bg-gray-100 text-gray-500',
-  klar: 'bg-blue-100 text-blue-700',
+  klar: 'bg-amber-100 text-amber-700',
   godkand: 'bg-green-100 text-green-700',
   underkand: 'bg-red-100 text-red-700',
 }
@@ -48,6 +54,9 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
   const [steg, setSteg] = useState(initialSteg)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
+  const [bilderMap, setBilderMap] = useState<Record<string, Bild[]>>(
+    Object.fromEntries(initialSteg.map(s => [s.id, s.bilder ?? []]))
+  )
   const [signing, setSigning] = useState<{ id: string; namn: string } | null>(null)
   const [noteringar, setNoteringar] = useState<Record<string, string>>(
     Object.fromEntries(initialSteg.map(s => [s.id, s.noteringar ?? '']))
@@ -64,12 +73,19 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
   async function uploadBild(stegId: string, file: File) {
     setUploading(stegId)
     const ext = file.name.split('.').pop() ?? 'jpg'
-    const path = `${projekt.id}/${stegId}.${ext}`
-    const { error: uploadErr } = await supabase.storage.from('bilder').upload(path, file, { upsert: true })
+    const path = `${projekt.id}/${stegId}/${Date.now()}.${ext}`
+    const { error: uploadErr } = await supabase.storage.from('bilder').upload(path, file, { upsert: false })
     if (uploadErr) { alert('Fel vid uppladdning: ' + uploadErr.message); setUploading(null); return }
     const { data: { publicUrl } } = supabase.storage.from('bilder').getPublicUrl(path)
-    await supabase.from('projekt_steg').update({ bild_url: publicUrl } as never).eq('id', stegId)
-    updateSteg(stegId, { bild_url: publicUrl })
+    const { data: bildRow } = await supabase
+      .from('projekt_steg_bilder')
+      .insert({ steg_id: stegId, url: publicUrl } as never)
+      .select('id, url')
+      .single()
+    if (bildRow) {
+      const bild = bildRow as Bild
+      setBilderMap(prev => ({ ...prev, [stegId]: [...(prev[stegId] ?? []), bild] }))
+    }
     setUploading(null)
   }
 
@@ -84,6 +100,12 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
     await supabase.from('projekt_steg').update({ noteringar: text || null, uppdaterad_tid: new Date().toISOString() } as never).eq('id', stegId)
     updateSteg(stegId, { noteringar: text || null })
     setSigning({ id: stegId, namn: userName })
+  }
+
+  async function godkannSteg(stegId: string, beslut: 'godkand' | 'underkand') {
+    const now = new Date().toISOString()
+    await supabase.from('projekt_steg').update({ status: beslut, uppdaterad_tid: now } as never).eq('id', stegId)
+    updateSteg(stegId, { status: beslut })
   }
 
   async function submitSignering() {
@@ -112,9 +134,10 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
   }
 
   const sortedSteg = [...steg].sort((a, b) => (a.mall_steg?.ordning ?? 0) - (b.mall_steg?.ordning ?? 0))
+  const antalGodkanda = steg.filter(s => s.status === 'godkand').length
   const antalKlara = steg.filter(s => s.status === 'klar' || s.status === 'godkand').length
-  const allaKlara = steg.length > 0 && antalKlara === steg.length
-  const progress = Math.round((antalKlara / Math.max(steg.length, 1)) * 100)
+  const allaKlara = steg.length > 0 && antalGodkanda === steg.length
+  const progress = Math.round((antalGodkanda / Math.max(steg.length, 1)) * 100)
 
   return (
     <div className="pb-8">
@@ -138,13 +161,18 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
           {/* Progress */}
           <div>
             <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-              <span>{antalKlara} av {steg.length} steg klara</span>
+              <span>{antalGodkanda} av {steg.length} steg godkända</span>
               <span className="font-semibold text-gray-600">{progress}%</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full bg-blue-600 rounded-full transition-all duration-500"
                 style={{ width: `${progress}%` }} />
             </div>
+            {antalKlara > antalGodkanda && (
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">
+                {antalKlara - antalGodkanda} steg väntar på godkännande
+              </p>
+            )}
           </div>
 
           {/* Åtgärder */}
@@ -229,31 +257,44 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
                     <p className="text-xs text-gray-400 mt-1">Sparas automatiskt</p>
                   </div>
 
-                  {/* Bild */}
+                  {/* Bilder */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Foto</label>
-                    {s.bild_url ? (
-                      <div className="space-y-2">
-                        <img src={s.bild_url} alt={ms.rubrik} className="w-full max-h-56 rounded-xl border border-gray-200 object-cover" />
-                        <button onClick={() => fileRefs.current[s.id]?.click()} className="text-xs text-blue-600 font-medium hover:underline">
-                          Byt foto
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => fileRefs.current[s.id]?.click()}
-                        disabled={uploading === s.id}
-                        className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 text-sm text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 flex flex-col items-center gap-2"
-                      >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {uploading === s.id ? 'Laddar upp...' : 'Ta foto eller välj bild'}
-                      </button>
-                    )}
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Foton</label>
+                    {(() => {
+                      const allaBilder: Bild[] = [
+                        ...(s.bild_url ? [{ id: 'legacy', url: s.bild_url }] : []),
+                        ...(bilderMap[s.id] ?? []),
+                      ]
+                      return (
+                        <div className="space-y-3">
+                          {allaBilder.length > 0 && (
+                            <div className={`grid gap-2 ${allaBilder.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                              {allaBilder.map(b => (
+                                <img key={b.id} src={b.url} alt={ms.rubrik}
+                                  className="w-full rounded-xl border border-gray-200 object-cover aspect-video" />
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => fileRefs.current[s.id]?.click()}
+                            disabled={uploading === s.id}
+                            className={`w-full border-2 border-dashed rounded-xl text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
+                              allaBilder.length > 0
+                                ? 'border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 py-3'
+                                : 'border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 py-8 flex-col'
+                            }`}
+                          >
+                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>{uploading === s.id ? 'Laddar upp...' : allaBilder.length > 0 ? 'Lägg till foto' : 'Ta foto eller välj bild'}</span>
+                          </button>
+                        </div>
+                      )
+                    })()}
                     <input ref={el => { if (el) fileRefs.current[s.id] = el }} type="file" accept="image/*" capture="environment"
-                      className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBild(s.id, f) }} />
+                      className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBild(s.id, f); e.target.value = '' }} />
                   </div>
 
                   {/* Signatur */}
@@ -273,8 +314,54 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
                   {s.status === 'ej_paborjad' && (
                     <button onClick={() => markeraKlar(s.id)}
                       className="w-full bg-blue-700 text-white py-3.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition-colors shadow-sm">
-                      Markera som klar
+                      Markera som klar → skicka för godkännande
                     </button>
+                  )}
+
+                  {/* Väntar på godkännande */}
+                  {s.status === 'klar' && (
+                    <div className="space-y-3">
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div>
+                            <p className="text-sm font-semibold text-amber-800">Väntar på godkännande</p>
+                            <p className="text-xs text-amber-700 mt-0.5">Kontakta ordförande eller överman för godkännande av detta steg innan nästa steg påbörjas.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => godkannSteg(s.id, 'godkand')}
+                          className="flex-1 bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-500 transition-colors">
+                          Godkänn steg
+                        </button>
+                        <button onClick={() => godkannSteg(s.id, 'underkand')}
+                          className="flex-1 bg-red-500 text-white py-3 rounded-xl text-sm font-semibold hover:bg-red-400 transition-colors">
+                          Ej godkänd
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ej godkänd — kan fyllas i igen */}
+                  {s.status === 'underkand' && (
+                    <div className="space-y-3">
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                        <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-semibold text-red-700">Ej godkänd</p>
+                          <p className="text-xs text-red-600 mt-0.5">Åtgärda och skicka för godkännande igen.</p>
+                        </div>
+                      </div>
+                      <button onClick={() => markeraKlar(s.id)}
+                        className="w-full bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-600 transition-colors">
+                        Skicka för godkännande igen
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

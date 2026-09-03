@@ -56,7 +56,7 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto text-center">
           <span className="inline-block bg-blue-800 text-blue-200 text-xs font-semibold px-3 py-1.5 rounded-full mb-5 uppercase tracking-wider">Pilotprogram 2026</span>
           <h1 className="text-4xl sm:text-5xl font-bold leading-tight mb-5 tracking-tight">
-            Digitala besiktnings&shy;protokoll för BRF
+            Digitala verifikations&shy;protokoll för BRF
           </h1>
           <p className="text-blue-200 text-base sm:text-lg max-w-2xl mx-auto mb-10 leading-relaxed">
             Säker BRF hjälper bostadsrättsföreningar att dokumentera renoveringar steg för steg — med foton, noteringar och digitala signaturer. Allt samlat i ett PDF-protokoll.
@@ -106,7 +106,7 @@ export default function LandingPage() {
               { nr: '1', titel: 'Skapa ett projekt', text: 'Ordföranden startar ett projekt för den aktuella renoveringen och väljer typ av åtgärd.' },
               { nr: '2', titel: 'Fyll i checklistan steg för steg', text: 'Varje projekt innehåller ett antal steg. Fyll i information, ladda upp foton och notera vad som gäller.' },
               { nr: '3', titel: 'Signera digitalt', text: 'Markera varje steg som klart med en digital signatur direkt i appen. Ingen utskrift behövs.' },
-              { nr: '4', titel: 'Generera PDF-protokoll', text: 'När alla steg är klara genereras ett komplett besiktningsprotokoll med bilder och signaturer.' },
+              { nr: '4', titel: 'Generera PDF-protokoll', text: 'När alla steg är klara genereras ett komplett verifikationsprotokoll med bilder och signaturer.' },
             ].map(s => (
               <div key={s.nr} className="flex gap-4 bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
                 <span className="flex-shrink-0 w-9 h-9 rounded-xl bg-blue-700 text-white font-bold flex items-center justify-center text-sm">{s.nr}</span>
@@ -179,7 +179,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="bg-blue-950 text-blue-400 text-center text-xs py-8 px-4 border-t border-blue-900">
         <p className="font-semibold text-white text-sm mb-1">Säker BRF</p>
-        <p>Digital besiktningsplattform för bostadsrättsföreningar · Pilotprogram 2026</p>
+        <p>Digital verifikationsplattform för bostadsrättsföreningar · Pilotprogram 2026</p>
       </footer>
     </div>
   )

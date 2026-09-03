@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+/* Dölj Netlify-badge */
+[data-overlay-id],
+.netlify-badge,
+#netlify-badge {
+  display: none !important;
+}

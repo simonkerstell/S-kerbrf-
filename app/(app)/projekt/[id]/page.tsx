@@ -36,19 +36,26 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
     .select('id, projekt_id, mall_steg_id, bild_url, signerad_av, signerad_tid, status, kommentar, noteringar, uppdaterad_tid, mall_steg(ordning, rubrik, instruktion)')
     .eq('projekt_id', id)
 
-  const steg = (stegRows ?? []) as Array<{
-    id: string
-    projekt_id: string
-    mall_steg_id: string
-    bild_url: string | null
-    signerad_av: string | null
-    signerad_tid: string | null
-    status: StegStatus
-    kommentar: string | null
-    noteringar: string | null
-    uppdaterad_tid: string
-    mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
-  }>
+  const stegIds = (stegRows ?? []).map(s => (s as { id: string }).id)
+  const { data: bilderRows } = stegIds.length > 0
+    ? await supabase.from('projekt_steg_bilder').select('id, steg_id, url, skapad_tid').in('steg_id', stegIds).order('skapad_tid', { ascending: true })
+    : { data: [] }
+
+  const bilderBySteg: Record<string, { id: string; url: string }[]> = {}
+  for (const b of (bilderRows ?? []) as Array<{ id: string; steg_id: string; url: string }>) {
+    if (!bilderBySteg[b.steg_id]) bilderBySteg[b.steg_id] = []
+    bilderBySteg[b.steg_id].push({ id: b.id, url: b.url })
+  }
+
+  const steg = (stegRows ?? []).map(s => ({
+    ...(s as {
+      id: string; projekt_id: string; mall_steg_id: string; bild_url: string | null
+      signerad_av: string | null; signerad_tid: string | null; status: StegStatus
+      kommentar: string | null; noteringar: string | null; uppdaterad_tid: string
+      mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
+    }),
+    bilder: bilderBySteg[(s as { id: string }).id] ?? [],
+  }))
 
   const { data: pdfRow } = await supabase
     .from('pdf_dokument')
