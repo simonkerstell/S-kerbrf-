@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { StegStatus } from '@/lib/supabase/types'
 
 interface Bild { id: string; url: string }
+interface Material { id: string; material: string; mangd: number | null; enhet: string | null }
 
 interface Steg {
   id: string; projekt_id: string; mall_steg_id: string
@@ -13,6 +14,7 @@ interface Steg {
   status: StegStatus; kommentar: string | null; noteringar: string | null
   mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
   bilder: Bild[]
+  material: Material[]
 }
 
 interface Projekt {
@@ -61,6 +63,11 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
   const [bilderMap, setBilderMap] = useState<Record<string, Bild[]>>(
     Object.fromEntries(initialSteg.map(s => [s.id, s.bilder ?? []]))
   )
+  const [materialMap, setMaterialMap] = useState<Record<string, Material[]>>(
+    Object.fromEntries(initialSteg.map(s => [s.id, s.material ?? []]))
+  )
+  const [nyMaterial, setNyMaterial] = useState<Record<string, { material: string; mangd: string; enhet: string }>>({})
+  const [spararMaterial, setSpararMaterial] = useState<string | null>(null)
   const [signing, setSigning] = useState<{ id: string; namn: string } | null>(null)
   const [noteringar, setNoteringar] = useState<Record<string, string>>(
     Object.fromEntries(initialSteg.map(s => [s.id, s.noteringar ?? '']))
@@ -122,6 +129,27 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
     await supabase.from('projekt_steg').update({ signerad_av: signing.namn, signerad_tid: now, status: 'klar', uppdaterad_tid: now } as never).eq('id', signing.id)
     updateSteg(signing.id, { signerad_av: signing.namn, signerad_tid: now, status: 'klar' })
     setSigning(null)
+  }
+
+  async function laggTillMaterial(stegId: string) {
+    const nm = nyMaterial[stegId]
+    if (!nm?.material.trim()) return
+    setSpararMaterial(stegId)
+    const { data } = await supabase
+      .from('steg_material')
+      .insert({ steg_id: stegId, material: nm.material, mangd: nm.mangd ? parseFloat(nm.mangd) : null, enhet: nm.enhet || null } as never)
+      .select('id, material, mangd, enhet')
+      .single()
+    if (data) {
+      setMaterialMap(prev => ({ ...prev, [stegId]: [...(prev[stegId] ?? []), data as Material] }))
+      setNyMaterial(prev => ({ ...prev, [stegId]: { material: '', mangd: '', enhet: '' } }))
+    }
+    setSpararMaterial(null)
+  }
+
+  async function taBortMaterial(stegId: string, id: string) {
+    await supabase.from('steg_material').delete().eq('id', id)
+    setMaterialMap(prev => ({ ...prev, [stegId]: (prev[stegId] ?? []).filter(m => m.id !== id) }))
   }
 
   async function laggTillPerson() {
@@ -284,6 +312,61 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
                       className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 resize-none"
                     />
                     <p className="text-xs text-gray-400 mt-1">Sparas automatiskt</p>
+                  </div>
+
+                  {/* Materialåtgång */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Materialåtgång</label>
+                    {(materialMap[s.id] ?? []).length > 0 && (
+                      <div className="mb-2 divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                        {(materialMap[s.id] ?? []).map(m => (
+                          <div key={m.id} className="flex items-center justify-between px-3 py-2 bg-white">
+                            <span className="text-sm text-gray-800">{m.material}</span>
+                            <div className="flex items-center gap-3">
+                              {m.mangd != null && (
+                                <span className="text-sm font-semibold text-blue-700">{m.mangd} {m.enhet ?? ''}</span>
+                              )}
+                              <button onClick={() => taBortMaterial(s.id, m.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">Ta bort</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Material (t.ex. Kakel)"
+                        value={nyMaterial[s.id]?.material ?? ''}
+                        onChange={e => setNyMaterial(prev => ({ ...prev, [s.id]: { ...{ material: '', mangd: '', enhet: '' }, ...prev[s.id], material: e.target.value } }))}
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Mängd"
+                        value={nyMaterial[s.id]?.mangd ?? ''}
+                        onChange={e => setNyMaterial(prev => ({ ...prev, [s.id]: { ...{ material: '', mangd: '', enhet: '' }, ...prev[s.id], mangd: e.target.value } }))}
+                        className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <select
+                        value={nyMaterial[s.id]?.enhet ?? ''}
+                        onChange={e => setNyMaterial(prev => ({ ...prev, [s.id]: { ...{ material: '', mangd: '', enhet: '' }, ...prev[s.id], enhet: e.target.value } }))}
+                        className="w-20 border border-gray-200 rounded-xl px-2 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Enhet</option>
+                        <option value="m²">m²</option>
+                        <option value="lm">lm</option>
+                        <option value="st">st</option>
+                        <option value="kg">kg</option>
+                        <option value="l">l</option>
+                      </select>
+                      <button
+                        onClick={() => laggTillMaterial(s.id)}
+                        disabled={!nyMaterial[s.id]?.material.trim() || spararMaterial === s.id}
+                        className="bg-blue-700 text-white px-3 py-2 rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-blue-600 transition-colors flex-shrink-0"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
                   {/* Bilder */}

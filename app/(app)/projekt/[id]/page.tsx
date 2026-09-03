@@ -57,6 +57,18 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
     bilder: bilderBySteg[(s as { id: string }).id] ?? [],
   }))
 
+  const { data: materialRows } = stegIds.length > 0
+    ? await supabase.from('steg_material').select('id, steg_id, material, mangd, enhet').in('steg_id', stegIds).order('skapad_tid', { ascending: true })
+    : { data: [] }
+
+  const materialBySteg: Record<string, { id: string; material: string; mangd: number | null; enhet: string | null }[]> = {}
+  for (const m of (materialRows ?? []) as Array<{ id: string; steg_id: string; material: string; mangd: number | null; enhet: string | null }>) {
+    if (!materialBySteg[m.steg_id]) materialBySteg[m.steg_id] = []
+    materialBySteg[m.steg_id].push({ id: m.id, material: m.material, mangd: m.mangd, enhet: m.enhet })
+  }
+
+  const stegMedMaterial = steg.map(s => ({ ...s, material: materialBySteg[s.id] ?? [] }))
+
   const { data: personalliggarRows } = await supabase
     .from('personalliggare')
     .select('id, namn, foretag, id06_nr, datum')
@@ -86,7 +98,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
         skapad_tid: projekt.skapad_tid,
         mall_namn: projekt.mallar?.namn ?? '',
       }}
-      steg={steg}
+      steg={stegMedMaterial}
       personalliggare={personalliggare}
       userName={profile?.namn ?? ''}
       pdfUrl={pdf?.fil_url ?? null}
