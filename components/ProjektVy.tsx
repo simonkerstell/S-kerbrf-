@@ -19,8 +19,12 @@ interface Projekt {
   id: string; brf_adress: string; status: string; skapad_tid: string; mall_namn: string
 }
 
+interface PersonEntry {
+  id: string; namn: string; foretag: string | null; id06_nr: string | null; datum: string
+}
+
 interface Props {
-  projekt: Projekt; steg: Steg[]; userName: string; pdfUrl: string | null
+  projekt: Projekt; steg: Steg[]; personalliggare: PersonEntry[]; userName: string; pdfUrl: string | null
 }
 
 const statusLabel: Record<string, string> = {
@@ -48,7 +52,7 @@ const projektStatusColor: Record<string, string> = {
   underkand: 'bg-red-100 text-red-700',
 }
 
-export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl }: Props) {
+export default function ProjektVy({ projekt, steg: initialSteg, personalliggare: initialPersoner, userName, pdfUrl }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [steg, setSteg] = useState(initialSteg)
@@ -61,6 +65,10 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
   const [noteringar, setNoteringar] = useState<Record<string, string>>(
     Object.fromEntries(initialSteg.map(s => [s.id, s.noteringar ?? '']))
   )
+  const [personer, setPersoner] = useState<PersonEntry[]>(initialPersoner)
+  const [visar, setVisar] = useState(false)
+  const [nyPerson, setNyPerson] = useState({ namn: '', foretag: '', id06_nr: '', datum: new Date().toISOString().slice(0, 10) })
+  const [sparar, setSparar] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [projektStatus, setProjektStatus] = useState(projekt.status)
   const [pdfLink, setPdfLink] = useState(pdfUrl)
@@ -114,6 +122,27 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
     await supabase.from('projekt_steg').update({ signerad_av: signing.namn, signerad_tid: now, status: 'klar', uppdaterad_tid: now } as never).eq('id', signing.id)
     updateSteg(signing.id, { signerad_av: signing.namn, signerad_tid: now, status: 'klar' })
     setSigning(null)
+  }
+
+  async function laggTillPerson() {
+    if (!nyPerson.namn.trim()) return
+    setSparar(true)
+    const { data } = await supabase
+      .from('personalliggare')
+      .insert({ projekt_id: projekt.id, namn: nyPerson.namn, foretag: nyPerson.foretag || null, id06_nr: nyPerson.id06_nr || null, datum: nyPerson.datum } as never)
+      .select('id, namn, foretag, id06_nr, datum')
+      .single()
+    if (data) {
+      setPersoner(prev => [data as PersonEntry, ...prev])
+      setNyPerson({ namn: '', foretag: '', id06_nr: '', datum: new Date().toISOString().slice(0, 10) })
+      setVisar(false)
+    }
+    setSparar(false)
+  }
+
+  async function taBortPerson(id: string) {
+    await supabase.from('personalliggare').delete().eq('id', id)
+    setPersoner(prev => prev.filter(p => p.id !== id))
   }
 
   async function uppdateraProjektStatus(newStatus: string) {
@@ -368,6 +397,83 @@ export default function ProjektVy({ projekt, steg: initialSteg, userName, pdfUrl
             </div>
           )
         })}
+      </div>
+
+      {/* Personalliggare */}
+      <div className="mt-6 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Personalliggare</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{personer.length} {personer.length === 1 ? 'person' : 'personer'} registrerade</p>
+          </div>
+          <button onClick={() => setVisar(v => !v)}
+            className="bg-blue-700 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-blue-600 transition-colors">
+            + Lägg till
+          </button>
+        </div>
+
+        {visar && (
+          <div className="px-5 py-4 border-b border-gray-100 bg-blue-50 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Namn *</label>
+                <input type="text" value={nyPerson.namn} onChange={e => setNyPerson(p => ({ ...p, namn: e.target.value }))}
+                  placeholder="Förnamn Efternamn"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Företag</label>
+                <input type="text" value={nyPerson.foretag} onChange={e => setNyPerson(p => ({ ...p, foretag: e.target.value }))}
+                  placeholder="Företagsnamn"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">ID06-nummer</label>
+                <input type="text" value={nyPerson.id06_nr} onChange={e => setNyPerson(p => ({ ...p, id06_nr: e.target.value }))}
+                  placeholder="ID06-kortnummer"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Datum på plats</label>
+                <input type="date" value={nyPerson.datum} onChange={e => setNyPerson(p => ({ ...p, datum: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setVisar(false)} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                Avbryt
+              </button>
+              <button onClick={laggTillPerson} disabled={!nyPerson.namn.trim() || sparar}
+                className="flex-1 bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-blue-600 transition-colors">
+                {sparar ? 'Sparar...' : 'Spara'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {personer.length === 0 && !visar ? (
+          <p className="px-5 py-6 text-sm text-gray-400 text-center">Inga personer incheckade än</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {personer.map(p => (
+              <div key={p.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{p.namn}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                    {p.foretag && <span className="text-xs text-gray-500">{p.foretag}</span>}
+                    {p.id06_nr && (
+                      <span className="text-xs text-blue-600 font-medium">ID06: {p.id06_nr}</span>
+                    )}
+                    <span className="text-xs text-gray-400">{new Date(p.datum).toLocaleDateString('sv-SE')}</span>
+                  </div>
+                </div>
+                <button onClick={() => taBortPerson(p.id)} className="text-xs text-red-400 hover:text-red-600 flex-shrink-0 transition-colors">
+                  Ta bort
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Signeringsmodal */}

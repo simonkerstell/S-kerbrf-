@@ -57,6 +57,16 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
     bilder: bilderBySteg[(s as { id: string }).id] ?? [],
   }))
 
+  const { data: personalliggarRows } = await supabase
+    .from('personalliggare')
+    .select('id, namn, foretag, id06_nr, datum')
+    .eq('projekt_id', id)
+    .order('datum', { ascending: false })
+
+  const personalliggare = (personalliggarRows ?? []) as Array<{
+    id: string; namn: string; foretag: string | null; id06_nr: string | null; datum: string
+  }>
+
   const { data: pdfRow } = await supabase
     .from('pdf_dokument')
     .select('fil_url, skapad_tid')
@@ -77,6 +87,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
         mall_namn: projekt.mallar?.namn ?? '',
       }}
       steg={steg}
+      personalliggare={personalliggare}
       userName={profile?.namn ?? ''}
       pdfUrl={pdf?.fil_url ?? null}
     />
