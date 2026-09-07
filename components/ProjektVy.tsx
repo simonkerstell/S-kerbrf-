@@ -24,6 +24,7 @@ interface Projekt {
 interface PersonEntry {
   id: string; datum: string; bekraftad_av: string | null; bekraftad_tid: string | null
   id06_nr: string | null; namn: string; foretag: string | null
+  org_nr: string | null; f_skatt: boolean
   cert_el: boolean; cert_vvs: boolean; cert_vatten: boolean; cert_tatskikt: boolean; cert_gas: boolean; cert_ovrigt: string | null
 }
 
@@ -36,7 +37,7 @@ const CERTS: { key: keyof PersonEntry; label: string; color: string }[] = [
 ]
 
 const DEFAULT_PERSON = {
-  id06_nr: '', namn: '', foretag: '',
+  id06_nr: '', namn: '', foretag: '', org_nr: '', f_skatt: false,
   cert_el: false, cert_vvs: false, cert_vatten: false, cert_tatskikt: false, cert_gas: false, cert_ovrigt: '',
   datum: new Date().toISOString().slice(0, 10), bekraftad: false,
 }
@@ -176,7 +177,7 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
     const { data } = await supabase.from('id06_register').select('*').eq('id06_nr', nyPerson.id06_nr.trim()).maybeSingle()
     if (data) {
       const d = data as Record<string, unknown>
-      setNyPerson(prev => ({ ...prev, namn: d.namn as string, foretag: (d.foretag as string) ?? '', cert_el: d.cert_el as boolean, cert_vvs: d.cert_vvs as boolean, cert_vatten: d.cert_vatten as boolean, cert_tatskikt: d.cert_tatskikt as boolean, cert_gas: d.cert_gas as boolean, cert_ovrigt: (d.cert_ovrigt as string) ?? '' }))
+      setNyPerson(prev => ({ ...prev, namn: d.namn as string, foretag: (d.foretag as string) ?? '', org_nr: (d.org_nr as string) ?? '', f_skatt: d.f_skatt as boolean, cert_el: d.cert_el as boolean, cert_vvs: d.cert_vvs as boolean, cert_vatten: d.cert_vatten as boolean, cert_tatskikt: d.cert_tatskikt as boolean, cert_gas: d.cert_gas as boolean, cert_ovrigt: (d.cert_ovrigt as string) ?? '' }))
       setId06Kand(true)
     } else {
       setId06Kand(false)
@@ -197,6 +198,7 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
       } else {
         const { data } = await supabase.from('id06_register').insert({
           id06_nr: nyPerson.id06_nr.trim(), namn: nyPerson.namn, foretag: nyPerson.foretag || null,
+          org_nr: nyPerson.org_nr || null, f_skatt: nyPerson.f_skatt,
           cert_el: nyPerson.cert_el, cert_vvs: nyPerson.cert_vvs, cert_vatten: nyPerson.cert_vatten,
           cert_tatskikt: nyPerson.cert_tatskikt, cert_gas: nyPerson.cert_gas, cert_ovrigt: nyPerson.cert_ovrigt || null,
         } as never).select('id').single()
@@ -215,6 +217,7 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
       setPersoner(prev => [{
         id: d.id, datum: d.datum, bekraftad_av: d.bekraftad_av, bekraftad_tid: d.bekraftad_tid,
         id06_nr: nyPerson.id06_nr || null, namn: nyPerson.namn, foretag: nyPerson.foretag || null,
+        org_nr: nyPerson.org_nr || null, f_skatt: nyPerson.f_skatt,
         cert_el: nyPerson.cert_el, cert_vvs: nyPerson.cert_vvs, cert_vatten: nyPerson.cert_vatten,
         cert_tatskikt: nyPerson.cert_tatskikt, cert_gas: nyPerson.cert_gas, cert_ovrigt: nyPerson.cert_ovrigt || null,
       }, ...prev])
@@ -581,13 +584,31 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
                   placeholder="Förnamn Efternamn"
                   className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
               </div>
-              <div className="col-span-2">
+              <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Företag</label>
                 <input type="text" value={nyPerson.foretag}
                   onChange={e => setNyPerson(p => ({ ...p, foretag: e.target.value }))}
                   readOnly={id06Kand === true}
                   placeholder="Företagsnamn"
                   className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Org.nr</label>
+                <input type="text" value={nyPerson.org_nr}
+                  onChange={e => setNyPerson(p => ({ ...p, org_nr: e.target.value }))}
+                  readOnly={id06Kand === true}
+                  placeholder="556000-0000"
+                  className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
+              </div>
+              <div className="col-span-2">
+                <label className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border cursor-pointer transition-all ${nyPerson.f_skatt ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'} ${id06Kand === true ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <input type="checkbox" checked={nyPerson.f_skatt}
+                    onChange={e => setNyPerson(p => ({ ...p, f_skatt: e.target.checked }))}
+                    disabled={id06Kand === true}
+                    className="rounded" />
+                  <span className="text-sm text-gray-700 font-medium">Innehar F-skatt</span>
+                  {nyPerson.f_skatt && <span className="ml-auto text-xs font-semibold text-green-600">Verifierat</span>}
+                </label>
               </div>
             </div>
 
@@ -658,9 +679,13 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
                       <p className="text-sm font-semibold text-gray-900">{p.namn}</p>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                         {p.foretag && <span className="text-xs text-gray-500">{p.foretag}</span>}
+                        {p.org_nr && <span className="text-xs text-gray-400">org.nr {p.org_nr}</span>}
                         {p.id06_nr && <span className="text-xs text-blue-600 font-medium">ID06: {p.id06_nr}</span>}
                         <span className="text-xs text-gray-400">{new Date(p.datum).toLocaleDateString('sv-SE')}</span>
                       </div>
+                      {p.f_skatt && (
+                        <span className="inline-block mt-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">F-skatt</span>
+                      )}
                       {aktivaCerts.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {aktivaCerts.map(c => (

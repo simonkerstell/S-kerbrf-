@@ -71,7 +71,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
 
   const { data: personalliggarRows } = await supabase
     .from('personalliggare')
-    .select('id, datum, bekraftad_av, bekraftad_tid, id06_register(id06_nr, namn, foretag, cert_el, cert_vvs, cert_vatten, cert_tatskikt, cert_gas, cert_ovrigt)')
+    .select('id, datum, bekraftad_av, bekraftad_tid, id06_register(id06_nr, namn, foretag, org_nr, f_skatt, cert_el, cert_vvs, cert_vatten, cert_tatskikt, cert_gas, cert_ovrigt)')
     .eq('projekt_id', id)
     .order('datum', { ascending: false })
 
@@ -86,6 +86,8 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
       id06_nr: (reg.id06_nr as string | null) ?? null,
       namn: (reg.namn as string) ?? '',
       foretag: (reg.foretag as string | null) ?? null,
+      org_nr: (reg.org_nr as string | null) ?? null,
+      f_skatt: (reg.f_skatt as boolean) ?? false,
       cert_el: (reg.cert_el as boolean) ?? false,
       cert_vvs: (reg.cert_vvs as boolean) ?? false,
       cert_vatten: (reg.cert_vatten as boolean) ?? false,
