@@ -22,13 +22,13 @@ export default async function MallarPage() {
 
   const { data: steg } = await supabase
     .from('mall_steg')
-    .select('id, mall_id, ordning, rubrik, instruktion')
+    .select('id, mall_id, ordning, rubrik, instruktion, branschregler, mall_steg_delar(id, rubrik, ordning)')
     .order('ordning')
 
   return (
     <MallarAdmin
       mallar={(mallar ?? []) as Array<{ id: string; namn: string; beskrivning: string | null }>}
-      steg={(steg ?? []) as Array<{ id: string; mall_id: string; ordning: number; rubrik: string; instruktion: string }>}
+      steg={(steg ?? []) as Array<{ id: string; mall_id: string; ordning: number; rubrik: string; instruktion: string; branschregler: string | null; mall_steg_delar: Array<{ id: string; rubrik: string; ordning: number }> }>}
     />
   )
 }

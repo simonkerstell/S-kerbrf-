@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Mall { id: string; namn: string; beskrivning: string | null }
-interface Steg { id: string; mall_id: string; ordning: number; rubrik: string; instruktion: string }
+interface StegDel { id: string; rubrik: string; ordning: number }
+interface Steg { id: string; mall_id: string; ordning: number; rubrik: string; instruktion: string; branschregler: string | null; mall_steg_delar: StegDel[] }
 
 export default function MallarAdmin({ mallar: initialMallar, steg: initialSteg }: { mallar: Mall[]; steg: Steg[] }) {
   const supabase = createClient()
@@ -15,6 +16,10 @@ export default function MallarAdmin({ mallar: initialMallar, steg: initialSteg }
   const [nyStegRubrik, setNyStegRubrik] = useState('')
   const [nyStegInstruktion, setNyStegInstruktion] = useState('')
   const [editingSteg, setEditingSteg] = useState<Steg | null>(null)
+  const [delarMap, setDelarMap] = useState<Record<string, StegDel[]>>(
+    Object.fromEntries(initialSteg.map(s => [s.id, s.mall_steg_delar ?? []]))
+  )
+  const [nyDelRubrik, setNyDelRubrik] = useState<Record<string, string>>({})
 
   const aktivaMallSteg = steg
     .filter(s => s.mall_id === selectedMall)
@@ -37,9 +42,25 @@ export default function MallarAdmin({ mallar: initialMallar, steg: initialSteg }
 
   async function sparaSteg() {
     if (!editingSteg) return
-    await supabase.from('mall_steg').update({ rubrik: editingSteg.rubrik, instruktion: editingSteg.instruktion } as never).eq('id', editingSteg.id)
+    await supabase.from('mall_steg').update({ rubrik: editingSteg.rubrik, instruktion: editingSteg.instruktion, branschregler: editingSteg.branschregler || null } as never).eq('id', editingSteg.id)
     setSteg(prev => prev.map(s => s.id === editingSteg.id ? editingSteg : s))
     setEditingSteg(null)
+  }
+
+  async function laggTillDel(stegId: string) {
+    const rubrik = nyDelRubrik[stegId]?.trim()
+    if (!rubrik) return
+    const ordning = (delarMap[stegId]?.length ?? 0) + 1
+    const { data } = await supabase.from('mall_steg_delar').insert({ mall_steg_id: stegId, rubrik, ordning } as never).select('id, rubrik, ordning').single()
+    if (data) {
+      setDelarMap(prev => ({ ...prev, [stegId]: [...(prev[stegId] ?? []), data as StegDel] }))
+      setNyDelRubrik(prev => ({ ...prev, [stegId]: '' }))
+    }
+  }
+
+  async function taBortDel(stegId: string, delId: string) {
+    await supabase.from('mall_steg_delar').delete().eq('id', delId)
+    setDelarMap(prev => ({ ...prev, [stegId]: (prev[stegId] ?? []).filter(d => d.id !== delId) }))
   }
 
   async function taBortSteg(id: string) {
@@ -115,7 +136,36 @@ export default function MallarAdmin({ mallar: initialMallar, steg: initialSteg }
                           onChange={e => setEditingSteg(prev => prev ? { ...prev, instruktion: e.target.value } : null)}
                           rows={3}
                           className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          placeholder="Instruktion"
                         />
+                        <textarea
+                          value={editingSteg.branschregler ?? ''}
+                          onChange={e => setEditingSteg(prev => prev ? { ...prev, branschregler: e.target.value } : null)}
+                          rows={2}
+                          className="w-full border border-amber-300 bg-amber-50 rounded px-2 py-1 text-sm"
+                          placeholder="Branschregler (t.ex. BBR 8:9, GVK 2022...)"
+                        />
+                        <div className="border-t border-gray-100 pt-2">
+                          <p className="text-xs font-semibold text-gray-500 mb-1">Underrubriker / kontrollpunkter</p>
+                          <div className="space-y-1 mb-2">
+                            {(delarMap[s.id] ?? []).map(d => (
+                              <div key={d.id} className="flex items-center justify-between text-xs bg-gray-50 px-2 py-1 rounded">
+                                <span>{d.ordning}. {d.rubrik}</span>
+                                <button onClick={() => taBortDel(s.id, d.id)} className="text-red-400 hover:text-red-600">Ta bort</button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-1">
+                            <input
+                              value={nyDelRubrik[s.id] ?? ''}
+                              onChange={e => setNyDelRubrik(prev => ({ ...prev, [s.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') laggTillDel(s.id) }}
+                              placeholder="Ny underpunkt..."
+                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
+                            />
+                            <button onClick={() => laggTillDel(s.id)} className="bg-blue-700 text-white px-2 py-1 rounded text-xs">+</button>
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <button onClick={sparaSteg} className="bg-green-600 text-white px-3 py-1 rounded text-sm">Spara</button>
                           <button onClick={() => setEditingSteg(null)} className="text-gray-500 px-3 py-1 rounded text-sm">Avbryt</button>

@@ -33,7 +33,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
 
   const { data: stegRows } = await supabase
     .from('projekt_steg')
-    .select('id, projekt_id, mall_steg_id, bild_url, signerad_av, signerad_tid, status, kommentar, noteringar, uppdaterad_tid, mall_steg(ordning, rubrik, instruktion)')
+    .select('id, projekt_id, mall_steg_id, bild_url, signerad_av, signerad_tid, status, kommentar, noteringar, uppdaterad_tid, mall_steg(ordning, rubrik, instruktion, branschregler, mall_steg_delar(id, rubrik, ordning))')
     .eq('projekt_id', id)
 
   const stegIds = (stegRows ?? []).map(s => (s as { id: string }).id)
@@ -52,7 +52,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
       id: string; projekt_id: string; mall_steg_id: string; bild_url: string | null
       signerad_av: string | null; signerad_tid: string | null; status: StegStatus
       kommentar: string | null; noteringar: string | null; uppdaterad_tid: string
-      mall_steg: { ordning: number; rubrik: string; instruktion: string } | null
+      mall_steg: { ordning: number; rubrik: string; instruktion: string; branschregler: string | null; mall_steg_delar: { id: string; rubrik: string; ordning: number }[] } | null
     }),
     bilder: bilderBySteg[(s as { id: string }).id] ?? [],
   }))
@@ -67,7 +67,25 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
     materialBySteg[m.steg_id].push({ id: m.id, material: m.material, mangd: m.mangd, enhet: m.enhet })
   }
 
-  const stegMedMaterial = steg.map(s => ({ ...s, material: materialBySteg[s.id] ?? [] }))
+  const { data: delarKlarRows } = stegIds.length > 0
+    ? await supabase.from('projekt_steg_delar_klar').select('projekt_steg_id, mall_steg_del_id, klar').in('projekt_steg_id', stegIds)
+    : { data: [] }
+
+  const delarKlarBySteg: Record<string, Record<string, boolean>> = {}
+  for (const d of (delarKlarRows ?? []) as Array<{ projekt_steg_id: string; mall_steg_del_id: string; klar: boolean }>) {
+    if (!delarKlarBySteg[d.projekt_steg_id]) delarKlarBySteg[d.projekt_steg_id] = {}
+    delarKlarBySteg[d.projekt_steg_id][d.mall_steg_del_id] = d.klar
+  }
+
+  const { data: ueRows } = await supabase
+    .from('projekt_ue')
+    .select('id, foretag, kontaktperson, telefon, typ_arbete, datum')
+    .eq('projekt_id', id)
+    .order('datum', { ascending: false })
+
+  const projektUe = (ueRows ?? []) as Array<{ id: string; foretag: string; kontaktperson: string | null; telefon: string | null; typ_arbete: string | null; datum: string }>
+
+  const stegMedMaterial = steg.map(s => ({ ...s, material: materialBySteg[s.id] ?? [], delar_klar: delarKlarBySteg[s.id] ?? {} }))
 
   const { data: personalliggarRows } = await supabase
     .from('personalliggare')
@@ -118,6 +136,7 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
       }}
       steg={stegMedMaterial}
       personalliggare={personalliggare}
+      projektUe={projektUe}
       userName={profile?.namn ?? ''}
       pdfUrl={pdf?.fil_url ?? null}
     />
