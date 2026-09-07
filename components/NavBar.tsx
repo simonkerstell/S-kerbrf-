@@ -31,7 +31,7 @@ export default function NavBar({ namn }: { namn: string }) {
       <div className="max-w-3xl mx-auto flex items-center justify-between h-14">
         <div className="flex items-center gap-6">
           <Link href="/projekt">
-            <Image src="/logo.png" alt="Säker BRF" width={80} height={40} className="object-contain" priority />
+            <Image src="/logo.png" alt="Säker BRF" width={48} height={56} className="object-contain" priority />
           </Link>
           <div className="hidden sm:flex items-center gap-5">
             {navLink('/projekt', 'Projekt')}

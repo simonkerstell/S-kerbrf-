@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LandingPage() {
@@ -24,7 +25,7 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="bg-blue-950 text-white px-5 py-4 sticky top-0 z-50 shadow-lg">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <span className="font-bold text-lg tracking-tight">Säker BRF</span>
+          <Image src="/logo.png" alt="Säker BRF" width={48} height={56} className="object-contain" priority />
           <div className="hidden sm:flex items-center gap-8">
             <a href="#hur-det-fungerar" className="text-sm text-blue-300 hover:text-white transition-colors">Hur det fungerar</a>
             <a href="#ansokan" className="text-sm text-blue-300 hover:text-white transition-colors">Ansök</a>
