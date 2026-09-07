@@ -22,7 +22,23 @@ interface Projekt {
 }
 
 interface PersonEntry {
-  id: string; namn: string; foretag: string | null; id06_nr: string | null; datum: string
+  id: string; datum: string; bekraftad_av: string | null; bekraftad_tid: string | null
+  id06_nr: string | null; namn: string; foretag: string | null
+  cert_el: boolean; cert_vvs: boolean; cert_vatten: boolean; cert_tatskikt: boolean; cert_gas: boolean; cert_ovrigt: string | null
+}
+
+const CERTS: { key: keyof PersonEntry; label: string; color: string }[] = [
+  { key: 'cert_el', label: 'El', color: 'bg-yellow-100 text-yellow-700' },
+  { key: 'cert_vvs', label: 'VVS/Rör', color: 'bg-blue-100 text-blue-700' },
+  { key: 'cert_vatten', label: 'Vatten & avlopp', color: 'bg-cyan-100 text-cyan-700' },
+  { key: 'cert_tatskikt', label: 'Tätskikt (GVK)', color: 'bg-green-100 text-green-700' },
+  { key: 'cert_gas', label: 'Gas', color: 'bg-orange-100 text-orange-700' },
+]
+
+const DEFAULT_PERSON = {
+  id06_nr: '', namn: '', foretag: '',
+  cert_el: false, cert_vvs: false, cert_vatten: false, cert_tatskikt: false, cert_gas: false, cert_ovrigt: '',
+  datum: new Date().toISOString().slice(0, 10), bekraftad: false,
 }
 
 interface Props {
@@ -74,7 +90,9 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
   )
   const [personer, setPersoner] = useState<PersonEntry[]>(initialPersoner)
   const [visar, setVisar] = useState(false)
-  const [nyPerson, setNyPerson] = useState({ namn: '', foretag: '', id06_nr: '', datum: new Date().toISOString().slice(0, 10) })
+  const [nyPerson, setNyPerson] = useState(DEFAULT_PERSON)
+  const [id06Kand, setId06Kand] = useState<boolean | null>(null)
+  const [sokerId06, setSokerId06] = useState(false)
   const [sparar, setSparar] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [projektStatus, setProjektStatus] = useState(projekt.status)
@@ -152,17 +170,56 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
     setMaterialMap(prev => ({ ...prev, [stegId]: (prev[stegId] ?? []).filter(m => m.id !== id) }))
   }
 
-  async function laggTillPerson() {
-    if (!nyPerson.namn.trim()) return
-    setSparar(true)
-    const { data } = await supabase
-      .from('personalliggare')
-      .insert({ projekt_id: projekt.id, namn: nyPerson.namn, foretag: nyPerson.foretag || null, id06_nr: nyPerson.id06_nr || null, datum: nyPerson.datum } as never)
-      .select('id, namn, foretag, id06_nr, datum')
-      .single()
+  async function lookupId06() {
+    if (!nyPerson.id06_nr.trim()) return
+    setSokerId06(true)
+    const { data } = await supabase.from('id06_register').select('*').eq('id06_nr', nyPerson.id06_nr.trim()).maybeSingle()
     if (data) {
-      setPersoner(prev => [data as PersonEntry, ...prev])
-      setNyPerson({ namn: '', foretag: '', id06_nr: '', datum: new Date().toISOString().slice(0, 10) })
+      const d = data as Record<string, unknown>
+      setNyPerson(prev => ({ ...prev, namn: d.namn as string, foretag: (d.foretag as string) ?? '', cert_el: d.cert_el as boolean, cert_vvs: d.cert_vvs as boolean, cert_vatten: d.cert_vatten as boolean, cert_tatskikt: d.cert_tatskikt as boolean, cert_gas: d.cert_gas as boolean, cert_ovrigt: (d.cert_ovrigt as string) ?? '' }))
+      setId06Kand(true)
+    } else {
+      setId06Kand(false)
+    }
+    setSokerId06(false)
+  }
+
+  async function laggTillPerson() {
+    if (!nyPerson.namn.trim() || !nyPerson.bekraftad) return
+    setSparar(true)
+    const now = new Date().toISOString()
+    let registerId: string | null = null
+
+    if (nyPerson.id06_nr.trim()) {
+      if (id06Kand) {
+        const { data } = await supabase.from('id06_register').select('id').eq('id06_nr', nyPerson.id06_nr.trim()).single()
+        registerId = data ? (data as { id: string }).id : null
+      } else {
+        const { data } = await supabase.from('id06_register').insert({
+          id06_nr: nyPerson.id06_nr.trim(), namn: nyPerson.namn, foretag: nyPerson.foretag || null,
+          cert_el: nyPerson.cert_el, cert_vvs: nyPerson.cert_vvs, cert_vatten: nyPerson.cert_vatten,
+          cert_tatskikt: nyPerson.cert_tatskikt, cert_gas: nyPerson.cert_gas, cert_ovrigt: nyPerson.cert_ovrigt || null,
+        } as never).select('id').single()
+        registerId = data ? (data as { id: string }).id : null
+      }
+    }
+
+    const { data } = await supabase.from('personalliggare').insert({
+      projekt_id: projekt.id, id06_register_id: registerId,
+      namn: nyPerson.namn, foretag: nyPerson.foretag || null, id06_nr: nyPerson.id06_nr || null,
+      datum: nyPerson.datum, bekraftad_av: userName, bekraftad_tid: now,
+    } as never).select('id, datum, bekraftad_av, bekraftad_tid').single()
+
+    if (data) {
+      const d = data as { id: string; datum: string; bekraftad_av: string; bekraftad_tid: string }
+      setPersoner(prev => [{
+        id: d.id, datum: d.datum, bekraftad_av: d.bekraftad_av, bekraftad_tid: d.bekraftad_tid,
+        id06_nr: nyPerson.id06_nr || null, namn: nyPerson.namn, foretag: nyPerson.foretag || null,
+        cert_el: nyPerson.cert_el, cert_vvs: nyPerson.cert_vvs, cert_vatten: nyPerson.cert_vatten,
+        cert_tatskikt: nyPerson.cert_tatskikt, cert_gas: nyPerson.cert_gas, cert_ovrigt: nyPerson.cert_ovrigt || null,
+      }, ...prev])
+      setNyPerson(DEFAULT_PERSON)
+      setId06Kand(null)
       setVisar(false)
     }
     setSparar(false)
@@ -496,39 +553,93 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
         </div>
 
         {visar && (
-          <div className="px-5 py-4 border-b border-gray-100 bg-blue-50 space-y-3">
+          <div className="px-5 py-4 border-b border-gray-100 bg-blue-50 space-y-4">
+            {/* ID06-sökning */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">ID06-nummer</label>
+              <div className="flex gap-2">
+                <input type="text" value={nyPerson.id06_nr}
+                  onChange={e => { setNyPerson(p => ({ ...p, id06_nr: e.target.value })); setId06Kand(null) }}
+                  placeholder="Ange ID06-kortnummer"
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <button onClick={lookupId06} disabled={!nyPerson.id06_nr.trim() || sokerId06}
+                  className="bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-blue-600 transition-colors">
+                  {sokerId06 ? '...' : 'Sök'}
+                </button>
+              </div>
+              {id06Kand === true && <p className="text-xs text-green-600 font-medium mt-1">Känd hantverkare — uppgifter hämtade från registret</p>}
+              {id06Kand === false && <p className="text-xs text-amber-600 font-medium mt-1">Nytt ID06 — fyll i uppgifter nedan, sparas i registret</p>}
+            </div>
+
+            {/* Namn & företag */}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Namn *</label>
-                <input type="text" value={nyPerson.namn} onChange={e => setNyPerson(p => ({ ...p, namn: e.target.value }))}
+                <input type="text" value={nyPerson.namn}
+                  onChange={e => setNyPerson(p => ({ ...p, namn: e.target.value }))}
+                  readOnly={id06Kand === true}
                   placeholder="Förnamn Efternamn"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Företag</label>
-                <input type="text" value={nyPerson.foretag} onChange={e => setNyPerson(p => ({ ...p, foretag: e.target.value }))}
-                  placeholder="Företagsnamn"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">ID06-nummer</label>
-                <input type="text" value={nyPerson.id06_nr} onChange={e => setNyPerson(p => ({ ...p, id06_nr: e.target.value }))}
-                  placeholder="ID06-kortnummer"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Datum på plats</label>
-                <input type="date" value={nyPerson.datum} onChange={e => setNyPerson(p => ({ ...p, datum: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Företag</label>
+                <input type="text" value={nyPerson.foretag}
+                  onChange={e => setNyPerson(p => ({ ...p, foretag: e.target.value }))}
+                  readOnly={id06Kand === true}
+                  placeholder="Företagsnamn"
+                  className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
               </div>
             </div>
+
+            {/* Certifieringar */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-2">Certifieringar / behörigheter</label>
+              <div className="grid grid-cols-2 gap-2">
+                {CERTS.map(c => (
+                  <label key={c.key} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 border cursor-pointer transition-all ${nyPerson[c.key as keyof typeof nyPerson] ? 'border-blue-400 bg-white' : 'border-gray-200 bg-white'} ${id06Kand === true ? 'opacity-60 pointer-events-none' : ''}`}>
+                    <input type="checkbox"
+                      checked={!!nyPerson[c.key as keyof typeof nyPerson]}
+                      onChange={e => setNyPerson(p => ({ ...p, [c.key]: e.target.checked }))}
+                      disabled={id06Kand === true}
+                      className="rounded" />
+                    <span className="text-sm text-gray-700">{c.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2">
+                <input type="text" value={nyPerson.cert_ovrigt}
+                  onChange={e => setNyPerson(p => ({ ...p, cert_ovrigt: e.target.value }))}
+                  readOnly={id06Kand === true}
+                  placeholder="Övrigt (fritext)"
+                  className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${id06Kand === true ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
+              </div>
+            </div>
+
+            {/* Datum */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Datum på plats</label>
+              <input type="date" value={nyPerson.datum} onChange={e => setNyPerson(p => ({ ...p, datum: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {/* Heder och samvete */}
+            <label className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 cursor-pointer">
+              <input type="checkbox" checked={nyPerson.bekraftad}
+                onChange={e => setNyPerson(p => ({ ...p, bekraftad: e.target.checked }))}
+                className="mt-0.5 rounded flex-shrink-0" />
+              <span className="text-xs text-gray-600 leading-relaxed">
+                Jag intygar på heder och samvete att ovanstående uppgifter är korrekta. Är informationen felaktig är avtalet ogiltigt och den som bekräftat bär det juridiska ansvaret.
+              </span>
+            </label>
+
             <div className="flex gap-2">
-              <button onClick={() => setVisar(false)} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+              <button onClick={() => { setVisar(false); setId06Kand(null); setNyPerson(DEFAULT_PERSON) }}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
                 Avbryt
               </button>
-              <button onClick={laggTillPerson} disabled={!nyPerson.namn.trim() || sparar}
+              <button onClick={laggTillPerson} disabled={!nyPerson.namn.trim() || !nyPerson.bekraftad || sparar}
                 className="flex-1 bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-blue-600 transition-colors">
-                {sparar ? 'Sparar...' : 'Spara'}
+                {sparar ? 'Sparar...' : 'Bekräfta & spara'}
               </button>
             </div>
           </div>
@@ -538,23 +649,39 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
           <p className="px-5 py-6 text-sm text-gray-400 text-center">Inga personer incheckade än</p>
         ) : (
           <div className="divide-y divide-gray-50">
-            {personer.map(p => (
-              <div key={p.id} className="px-5 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{p.namn}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                    {p.foretag && <span className="text-xs text-gray-500">{p.foretag}</span>}
-                    {p.id06_nr && (
-                      <span className="text-xs text-blue-600 font-medium">ID06: {p.id06_nr}</span>
-                    )}
-                    <span className="text-xs text-gray-400">{new Date(p.datum).toLocaleDateString('sv-SE')}</span>
+            {personer.map(p => {
+              const aktivaCerts = CERTS.filter(c => p[c.key as keyof PersonEntry])
+              return (
+                <div key={p.id} className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{p.namn}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        {p.foretag && <span className="text-xs text-gray-500">{p.foretag}</span>}
+                        {p.id06_nr && <span className="text-xs text-blue-600 font-medium">ID06: {p.id06_nr}</span>}
+                        <span className="text-xs text-gray-400">{new Date(p.datum).toLocaleDateString('sv-SE')}</span>
+                      </div>
+                      {aktivaCerts.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {aktivaCerts.map(c => (
+                            <span key={c.key} className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.color}`}>{c.label}</span>
+                          ))}
+                          {p.cert_ovrigt && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{p.cert_ovrigt}</span>}
+                        </div>
+                      )}
+                      {p.bekraftad_av && (
+                        <p className="text-xs text-gray-400 mt-1.5">
+                          Bekräftat av {p.bekraftad_av}{p.bekraftad_tid ? ` · ${new Date(p.bekraftad_tid).toLocaleDateString('sv-SE')}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => taBortPerson(p.id)} className="text-xs text-red-400 hover:text-red-600 flex-shrink-0 transition-colors mt-0.5">
+                      Ta bort
+                    </button>
                   </div>
                 </div>
-                <button onClick={() => taBortPerson(p.id)} className="text-xs text-red-400 hover:text-red-600 flex-shrink-0 transition-colors">
-                  Ta bort
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

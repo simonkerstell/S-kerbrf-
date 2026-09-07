@@ -71,13 +71,29 @@ export default async function ProjektDetailPage({ params }: { params: Promise<{ 
 
   const { data: personalliggarRows } = await supabase
     .from('personalliggare')
-    .select('id, namn, foretag, id06_nr, datum')
+    .select('id, datum, bekraftad_av, bekraftad_tid, id06_register(id06_nr, namn, foretag, cert_el, cert_vvs, cert_vatten, cert_tatskikt, cert_gas, cert_ovrigt)')
     .eq('projekt_id', id)
     .order('datum', { ascending: false })
 
-  const personalliggare = (personalliggarRows ?? []) as Array<{
-    id: string; namn: string; foretag: string | null; id06_nr: string | null; datum: string
-  }>
+  const personalliggare = (personalliggarRows ?? []).map(row => {
+    const r = row as Record<string, unknown>
+    const reg = (r.id06_register as Record<string, unknown>) ?? {}
+    return {
+      id: r.id as string,
+      datum: r.datum as string,
+      bekraftad_av: (r.bekraftad_av as string | null) ?? null,
+      bekraftad_tid: (r.bekraftad_tid as string | null) ?? null,
+      id06_nr: (reg.id06_nr as string | null) ?? null,
+      namn: (reg.namn as string) ?? '',
+      foretag: (reg.foretag as string | null) ?? null,
+      cert_el: (reg.cert_el as boolean) ?? false,
+      cert_vvs: (reg.cert_vvs as boolean) ?? false,
+      cert_vatten: (reg.cert_vatten as boolean) ?? false,
+      cert_tatskikt: (reg.cert_tatskikt as boolean) ?? false,
+      cert_gas: (reg.cert_gas as boolean) ?? false,
+      cert_ovrigt: (reg.cert_ovrigt as string | null) ?? null,
+    }
+  })
 
   const { data: pdfRow } = await supabase
     .from('pdf_dokument')
