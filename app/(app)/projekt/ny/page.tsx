@@ -56,12 +56,6 @@ export default function NyttProjektPage() {
     router.push(`/projekt/${projekt.id}`)
   }
 
-  const mallIkoner: Record<string, string> = {
-    'Renovering av lägenhet': '🏠',
-    'Badrumsrenovering': '🚿',
-    'Markarbete och utvändiga arbeten': '🌿',
-  }
-
   return (
     <div className="max-w-2xl mx-auto">
       <button onClick={() => router.back()} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1.5 transition-colors">
@@ -87,7 +81,6 @@ export default function NyttProjektPage() {
                 }`}
               >
                 <div className="flex items-start gap-4">
-                  <span className="text-2xl flex-shrink-0">{mallIkoner[m.namn] ?? '📋'}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-gray-900 text-sm">{m.namn}</p>
