@@ -133,6 +133,23 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
     setUploading(null)
   }
 
+  async function taBortBild(stegId: string, bild: Bild) {
+    if (!confirm('Ta bort bilden?')) return
+    if (bild.id === 'legacy') {
+      await supabase.from('projekt_steg').update({ bild_url: null, uppdaterad_tid: new Date().toISOString() } as never).eq('id', stegId)
+      updateSteg(stegId, { bild_url: null })
+    } else {
+      await supabase.from('projekt_steg_bilder').delete().eq('id', bild.id)
+      setBilderMap(prev => ({ ...prev, [stegId]: (prev[stegId] ?? []).filter(b => b.id !== bild.id) }))
+    }
+    const marker = '/bilder/'
+    const idx = bild.url.indexOf(marker)
+    if (idx !== -1) {
+      const path = decodeURIComponent(bild.url.slice(idx + marker.length))
+      await supabase.storage.from('bilder').remove([path])
+    }
+  }
+
   async function sparaNoteringar(stegId: string) {
     const text = noteringar[stegId] ?? ''
     await supabase.from('projekt_steg').update({ noteringar: text || null, uppdaterad_tid: new Date().toISOString() } as never).eq('id', stegId)
@@ -512,8 +529,17 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
                           {allaBilder.length > 0 && (
                             <div className={`grid gap-2 ${allaBilder.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                               {allaBilder.map(b => (
-                                <img key={b.id} src={b.url} alt={ms.rubrik}
-                                  className="w-full rounded-xl border border-gray-200 object-cover aspect-video" />
+                                <div key={b.id} className="relative">
+                                  <img src={b.url} alt={ms.rubrik}
+                                    className="w-full rounded-xl border border-gray-200 object-cover aspect-video" />
+                                  <button onClick={() => taBortBild(s.id, b)}
+                                    aria-label="Ta bort bild"
+                                    className="absolute top-1.5 right-1.5 bg-black/50 hover:bg-red-600 text-white rounded-full p-1.5 transition-colors">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
                               ))}
                             </div>
                           )}
