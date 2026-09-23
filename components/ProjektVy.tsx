@@ -596,7 +596,7 @@ export default function ProjektVy({ projekt, steg: initialSteg, personalliggare:
                         </svg>
                         <div>
                           <p className="text-sm font-semibold text-red-700">Ej godkänd</p>
-                          <p className="text-xs text-red-600 mt-0.5">Åtgärda och skicka för godkännande igen.</p>
+                          <p className="text-xs text-red-600 mt-0.5">Kontakta styrelsen eller tekniskt ansvarig innan du åtgärdar och skickar för godkännande igen.</p>
                         </div>
                       </div>
                       <button onClick={() => markeraKlar(s.id)}

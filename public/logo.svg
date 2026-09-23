@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Säker BRF">
+  <!-- Sköld (säker) -->
+  <path d="M256 44 L436 108 V252 C436 356 360 434 256 468 C152 434 76 356 76 252 V108 Z" fill="#ffffff"/>
+  <!-- Hus (BRF) -->
+  <path d="M256 190 L340 264 L314 264 L314 340 L198 340 L198 264 L172 264 Z" fill="#172554"/>
+  <!-- Dörr -->
+  <path d="M240 300 H272 V340 H240 Z" fill="#ffffff"/>
+  <!-- Bock-bricka (godkänd) -->
+  <circle cx="372" cy="380" r="78" fill="#172554"/>
+  <circle cx="372" cy="380" r="62" fill="#16a34a"/>
+  <path d="M346 382 L366 402 L402 356" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -30,8 +30,9 @@ export default function NavBar({ namn }: { namn: string }) {
     <nav className="bg-blue-950 text-white px-5 py-0 shadow-lg sticky top-0 z-50">
       <div className="max-w-3xl mx-auto flex items-center justify-between h-14">
         <div className="flex items-center gap-6">
-          <Link href="/projekt">
-            <Image src="/logo.png" alt="Säker BRF" width={48} height={56} className="object-contain" priority />
+          <Link href="/projekt" className="flex items-center gap-2.5">
+            <Image src="/logo.svg" alt="Säker BRF" width={40} height={40} className="object-contain" priority unoptimized />
+            <span className="font-semibold tracking-tight text-white">Säker BRF</span>
           </Link>
           <div className="hidden sm:flex items-center gap-5">
             {navLink('/projekt', 'Projekt')}
