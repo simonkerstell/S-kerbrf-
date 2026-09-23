@@ -78,6 +78,11 @@ export default function LoginPage() {
               {loading ? 'Loggar in...' : 'Logga in'}
             </button>
           </form>
+
+          <p className="text-sm text-gray-500 text-center mt-6">
+            Har du inget konto?{' '}
+            <Link href="/ansok-konto" className="text-blue-700 font-semibold hover:text-blue-600 transition-colors">Ansök om konto</Link>
+          </p>
         </div>
       </div>
     </div>
